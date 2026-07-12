@@ -16,7 +16,21 @@
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-<div id="app">
+
+<div id="authGate" class="auth-gate">
+  <div class="auth-box">
+    <div class="auth-title">DIL AFROZE</div>
+    <div class="auth-subtitle">Natural Skin &amp; Hair Care</div>
+    <p class="auth-hint">Enter the shop PIN to open the order manager on this device.</p>
+    <form id="pinForm">
+      <input type="password" id="pinInput" inputmode="numeric" autocomplete="current-password" placeholder="PIN" required>
+      <button type="submit" class="btn btn-primary btn-block btn-large" id="pinSubmitBtn">Unlock</button>
+    </form>
+    <div id="pinError" class="auth-error"></div>
+  </div>
+</div>
+
+<div id="app" class="hidden">
 
   <header class="app-header">
     <div class="brand">
@@ -151,6 +165,10 @@
 
 <div class="toast" id="toast"></div>
 
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+<script src="firebase-config.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

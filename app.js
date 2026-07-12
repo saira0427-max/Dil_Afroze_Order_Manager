@@ -8,42 +8,27 @@
   var STATUS_LABELS = { new: 'New', packaged: 'Packaged', shipped: 'Shipped', delivered: 'Delivered' };
   var DELIVERY_LABELS = { notset: 'Not set', pickup: 'Pickup', hand: 'Hand delivery', post: 'Post' };
   var PAYMENT_LABELS = { notset: 'Not set', cash: 'Cash', bank: 'Bank transfer' };
+  var LS_PENDING = 'da_pending_sync';
 
-  var LS = {
-    products: 'da_products',
-    categories: 'da_categories',
-    orders: 'da_orders',
-    settings: 'da_settings',
-    counter: 'da_order_counter',
-    pending: 'da_pending_sync'
-  };
+  /* ---------- FIRESTORE REFS ---------- */
+  var productsCol = daDb.collection('products');
+  var ordersCol = daDb.collection('orders');
+  var metaCol = daDb.collection('meta');
+  var listenersStarted = false;
+  var unsubscribers = [];
 
   /* ---------- STATE ---------- */
   var state = {
-    products: loadJSON(LS.products, []),
-    categories: loadJSON(LS.categories, DEFAULT_CATEGORIES.slice()),
-    orders: loadJSON(LS.orders, []),
-    settings: loadJSON(LS.settings, { appsScriptUrl: '' }),
-    counter: parseInt(localStorage.getItem(LS.counter) || '0', 10),
+    products: [],
+    categories: DEFAULT_CATEGORIES.slice(),
+    orders: [],
+    settings: { appsScriptUrl: '' },
     currentOrder: { customer: { name: '', phone: '', email: '', address: '', notes: '' }, items: [], discount: 0 },
     activeCatFilter: 'all',
     activeStatusFilter: 'all'
   };
 
-  function loadJSON(key, fallback) {
-    try {
-      var raw = localStorage.getItem(key);
-      return raw ? JSON.parse(raw) : fallback;
-    } catch (e) { return fallback; }
-  }
-  function saveProducts() { localStorage.setItem(LS.products, JSON.stringify(state.products)); }
-  function saveCategories() { localStorage.setItem(LS.categories, JSON.stringify(state.categories)); }
-  function saveOrders() { localStorage.setItem(LS.orders, JSON.stringify(state.orders)); }
-  function saveSettings() { localStorage.setItem(LS.settings, JSON.stringify(state.settings)); }
-  function saveCounter() { localStorage.setItem(LS.counter, String(state.counter)); }
-
   /* ---------- UTILS ---------- */
-  function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 8); }
   function money(n) { return '£' + (Math.round((n + Number.EPSILON) * 100) / 100).toFixed(2); }
   function todayUK() {
     var d = new Date();
@@ -90,30 +75,37 @@
     });
   }
 
-  /* ---------- SYNC ---------- */
-  function queuePush(payload) {
-    var q = loadJSON(LS.pending, []);
-    q.push(payload);
-    localStorage.setItem(LS.pending, JSON.stringify(q));
+  function onFirestoreError(err) {
+    console.error('Firestore error:', err);
+    toast('Sync error — check your connection');
   }
-  function queueSet(q) { localStorage.setItem(LS.pending, JSON.stringify(q)); }
+
+  /* ---------- APPS SCRIPT (GOOGLE SHEET) SYNC ---------- */
+  function loadJSON(key, fallback) {
+    try {
+      var raw = localStorage.getItem(key);
+      return raw ? JSON.parse(raw) : fallback;
+    } catch (e) { return fallback; }
+  }
+  function queuePush(payload) {
+    var q = loadJSON(LS_PENDING, []);
+    q.push(payload);
+    localStorage.setItem(LS_PENDING, JSON.stringify(q));
+  }
+  function queueSet(q) { localStorage.setItem(LS_PENDING, JSON.stringify(q)); }
 
   function syncToSheet(payload) {
     var url = state.settings.appsScriptUrl;
     if (!url) return;
-    sendPayload(url, payload).catch(function () {
-      queuePush(payload);
-    });
+    sendPayload(url, payload).catch(function () { queuePush(payload); });
   }
 
   function sendPayload(url, payload) {
     var json = JSON.stringify(payload);
-    // GET beacon (image, best-effort, can't confirm delivery but very compatible)
     try {
       var img = new Image();
       img.src = url + (url.indexOf('?') >= 0 ? '&' : '?') + 'payload=' + encodeURIComponent(json);
     } catch (e) { /* ignore */ }
-    // POST no-cors fetch (primary path)
     return fetch(url, {
       method: 'POST',
       mode: 'no-cors',
@@ -125,7 +117,7 @@
   function flushPendingSync() {
     var url = state.settings.appsScriptUrl;
     if (!url) return;
-    var q = loadJSON(LS.pending, []);
+    var q = loadJSON(LS_PENDING, []);
     if (!q.length) return;
     var remaining = [];
     var chain = Promise.resolve();
@@ -217,11 +209,9 @@
       var id = delBtn.dataset.delProduct;
       var p = state.products.find(function (x) { return x.id === id; });
       if (p && confirm('Delete "' + p.name + '"? This cannot be undone.')) {
-        state.products = state.products.filter(function (x) { return x.id !== id; });
-        saveProducts();
-        renderProducts();
-        renderNewOrderProducts();
-        toast('Product deleted');
+        productsCol.doc(id).delete().then(function () {
+          toast('Product deleted');
+        }).catch(onFirestoreError);
       }
     }
   });
@@ -269,12 +259,18 @@
       var cat = document.getElementById('pCat').value;
       if (!name) { toast('Please enter a product name'); return; }
       if (isNaN(price) || price < 0) { toast('Please enter a valid price'); return; }
-      state.products.push({ id: uid(), name: name, price: price, desc: desc, cat: cat, img: photoData });
-      saveProducts();
-      renderProducts();
-      renderNewOrderProducts();
-      closeModal();
-      toast('Product added');
+      var saveBtn = document.getElementById('pSave');
+      saveBtn.disabled = true;
+      productsCol.add({
+        name: name, price: price, desc: desc, cat: cat, img: photoData,
+        createdAt: firebase.firestore.FieldValue.serverTimestamp()
+      }).then(function () {
+        closeModal();
+        toast('Product added');
+      }).catch(function (err) {
+        onFirestoreError(err);
+        saveBtn.disabled = false;
+      });
     });
   }
 
@@ -303,16 +299,13 @@
       var name = document.getElementById('newCatName').value.trim();
       if (!name) { toast('Enter a category name'); return; }
       if (state.categories.indexOf(name) >= 0) { toast('Category already exists'); return; }
-      state.categories.push(name);
-      saveCategories();
-      renderCategoryModal();
-      renderNewOrderCatFilter();
-      toast('Category added');
+      metaCol.doc('categories').update({ list: firebase.firestore.FieldValue.arrayUnion(name) }).then(function () {
+        document.getElementById('newCatName').value = '';
+        toast('Category added');
+      }).catch(onFirestoreError);
     });
     document.getElementById('catCloseBtn').addEventListener('click', function () {
       closeModal();
-      renderProducts();
-      renderNewOrderProducts();
     });
     modalBox.querySelectorAll('[data-del-cat]').forEach(function (btn) {
       btn.addEventListener('click', function () {
@@ -320,13 +313,18 @@
         var inUse = state.products.some(function (p) { return p.cat === cat; });
         if (inUse) { toast('Cannot delete — products use this category'); return; }
         if (!confirm('Delete category "' + cat + '"?')) return;
-        state.categories = state.categories.filter(function (c) { return c !== cat; });
-        saveCategories();
-        renderCategoryModal();
-        renderNewOrderCatFilter();
-        toast('Category deleted');
+        metaCol.doc('categories').update({ list: firebase.firestore.FieldValue.arrayRemove(cat) }).then(function () {
+          toast('Category deleted');
+        }).catch(onFirestoreError);
       });
     });
+  }
+
+  // Re-render the open category modal whenever categories/products change underneath it
+  function refreshCategoryModalIfOpen() {
+    if (overlay.classList.contains('open') && document.getElementById('addCatBtn')) {
+      renderCategoryModal();
+    }
   }
 
   /* ================= NEW ORDER TAB ================= */
@@ -341,6 +339,7 @@
   function renderNewOrderCatFilter() {
     var el = document.getElementById('orderCatFilter');
     var cats = ['all'].concat(allCategoriesInOrder());
+    if (cats.indexOf(state.activeCatFilter) < 0) state.activeCatFilter = 'all';
     el.innerHTML = cats.map(function (c) {
       var label = c === 'all' ? 'All' : c;
       return '<button class="pill' + (state.activeCatFilter === c ? ' active' : '') + '" data-cat="' + escapeHtml(c) + '">' + escapeHtml(label) + '</button>';
@@ -440,8 +439,8 @@
     if (saveBtn) {
       var pid = saveBtn.dataset.editSave;
       var it = findOrderItem(pid);
-      var nameInput = modalOrDocQuery('[data-edit-name="' + pid + '"]');
-      var priceInput = modalOrDocQuery('[data-edit-price="' + pid + '"]');
+      var nameInput = document.querySelector('[data-edit-name="' + pid + '"]');
+      var priceInput = document.querySelector('[data-edit-price="' + pid + '"]');
       var newName = nameInput.value.trim();
       var newPrice = parseFloat(priceInput.value);
       if (newName) it.name = newName;
@@ -463,8 +462,6 @@
       return;
     }
   });
-
-  function modalOrDocQuery(sel) { return document.querySelector(sel); }
 
   document.getElementById('addCustomItemBtn').addEventListener('click', function () {
     var name = document.getElementById('ciName').value.trim();
@@ -510,6 +507,22 @@
     renderSummary();
   });
 
+  function createOrderInFirestore(orderData) {
+    var counterRef = metaCol.doc('counter');
+    var newOrderRef = ordersCol.doc();
+    return daDb.runTransaction(function (tx) {
+      return tx.get(counterRef).then(function (snap) {
+        var current = (snap.exists && snap.data().value) || 0;
+        var next = current + 1;
+        var orderNumber = 'DA' + String(next).padStart(4, '0');
+        tx.set(counterRef, { value: next }, { merge: true });
+        orderData.orderNumber = orderNumber;
+        tx.set(newOrderRef, orderData);
+        return orderNumber;
+      });
+    });
+  }
+
   document.getElementById('saveOrderBtn').addEventListener('click', function () {
     var c = state.currentOrder.customer;
     if (!c.name || !c.name.trim()) { toast('Customer name is required'); document.getElementById('customerCard').classList.add('open'); return; }
@@ -518,13 +531,8 @@
     var subtotal = state.currentOrder.items.reduce(function (s, it) { return s + (it.gift ? 0 : it.price * it.qty); }, 0);
     var discount = state.currentOrder.discount || 0;
     var total = Math.max(0, subtotal - discount);
-    state.counter += 1;
-    saveCounter();
-    var orderNumber = 'DA' + String(state.counter).padStart(4, '0');
     var date = todayUK();
-    var order = {
-      id: uid(),
-      orderNumber: orderNumber,
+    var orderData = {
       date: date,
       customer: {
         name: c.name.trim(), phone: c.phone || '', email: c.email || '',
@@ -540,24 +548,37 @@
       payment: 'notset',
       status: 'new',
       dates: { created: date, packaged: '', shipped: '', delivered: '', paid: '' },
-      driveLink: ''
+      driveLink: '',
+      createdAt: firebase.firestore.FieldValue.serverTimestamp()
     };
-    state.orders.unshift(order);
-    saveOrders();
 
-    syncToSheet({ action: 'create', orderNumber: order.orderNumber, customer: order.customer.name, total: order.total, date: order.date });
+    var saveBtn = document.getElementById('saveOrderBtn');
+    saveBtn.disabled = true;
+    saveBtn.textContent = 'Saving…';
 
-    // reset draft
-    state.currentOrder = { customer: { name: '', phone: '', email: '', address: '', notes: '' }, items: [], discount: 0 };
-    ['custName', 'custPhone', 'custEmail', 'custAddress', 'custNotes'].forEach(function (id) { document.getElementById(id).value = ''; });
-    document.getElementById('orderDiscount').value = 0;
-    renderNewOrderProducts();
-    renderSummary();
-    document.getElementById('customerCard').classList.add('open');
+    createOrderInFirestore(orderData).then(function (orderNumber) {
+      syncToSheet({ action: 'create', orderNumber: orderNumber, customer: orderData.customer.name, total: orderData.total, date: orderData.date });
 
-    renderOrders();
-    toast('Order ' + orderNumber + ' saved');
-    document.querySelector('.tab-btn[data-tab="orders"]').click();
+      state.currentOrder = { customer: { name: '', phone: '', email: '', address: '', notes: '' }, items: [], discount: 0 };
+      ['custName', 'custPhone', 'custEmail', 'custAddress', 'custNotes'].forEach(function (id) { document.getElementById(id).value = ''; });
+      document.getElementById('orderDiscount').value = 0;
+      renderNewOrderProducts();
+      renderSummary();
+      document.getElementById('customerCard').classList.add('open');
+
+      toast('Order ' + orderNumber + ' saved');
+      document.querySelector('.tab-btn[data-tab="orders"]').click();
+    }).catch(function (err) {
+      console.error(err);
+      if (!navigator.onLine) {
+        toast('You’re offline — connect to the internet to save new orders');
+      } else {
+        toast('Could not save order — please try again');
+      }
+    }).finally(function () {
+      saveBtn.disabled = false;
+      saveBtn.textContent = 'Save Order';
+    });
   });
 
   /* ================= ORDERS TAB ================= */
@@ -617,14 +638,15 @@
     if (paidBtn) {
       var o = getOrder(paidBtn.dataset.togglePaid);
       if (o.dates.paid) {
-        o.dates.paid = '';
-        syncToSheet({ action: 'unpaid', orderNumber: o.orderNumber });
+        ordersCol.doc(o.id).update({ 'dates.paid': '' }).then(function () {
+          syncToSheet({ action: 'unpaid', orderNumber: o.orderNumber });
+        }).catch(onFirestoreError);
       } else {
-        o.dates.paid = todayUK();
-        syncToSheet({ action: 'paid', orderNumber: o.orderNumber, date: o.dates.paid });
+        var d = todayUK();
+        ordersCol.doc(o.id).update({ 'dates.paid': d }).then(function () {
+          syncToSheet({ action: 'paid', orderNumber: o.orderNumber, date: d });
+        }).catch(onFirestoreError);
       }
-      saveOrders();
-      renderOrders();
       return;
     }
     var printBtn = e.target.closest('[data-print]');
@@ -636,19 +658,22 @@
 
   document.getElementById('ordersList').addEventListener('change', function (e) {
     var del = e.target.closest('[data-delivery]');
-    if (del) { getOrder(del.dataset.delivery).delivery = del.value; saveOrders(); return; }
+    if (del) { ordersCol.doc(del.dataset.delivery).update({ delivery: del.value }).catch(onFirestoreError); return; }
     var pay = e.target.closest('[data-payment]');
-    if (pay) { getOrder(pay.dataset.payment).payment = pay.value; saveOrders(); return; }
+    if (pay) { ordersCol.doc(pay.dataset.payment).update({ payment: pay.value }).catch(onFirestoreError); return; }
     var st = e.target.closest('[data-status-update]');
     if (st) {
       var o = getOrder(st.dataset.statusUpdate);
-      o.status = st.value;
+      var update = { status: st.value };
+      var d = todayUK();
       if (o.dates.hasOwnProperty(st.value)) {
-        o.dates[st.value] = todayUK();
-        syncToSheet({ action: 'status', orderNumber: o.orderNumber, status: st.value, date: o.dates[st.value] });
+        update['dates.' + st.value] = d;
       }
-      saveOrders();
-      renderOrders();
+      ordersCol.doc(o.id).update(update).then(function () {
+        if (o.dates.hasOwnProperty(st.value)) {
+          syncToSheet({ action: 'status', orderNumber: o.orderNumber, status: st.value, date: d });
+        }
+      }).catch(onFirestoreError);
       return;
     }
   });
@@ -656,11 +681,12 @@
     var link = e.target.closest('[data-drive-link]');
     if (!link) return;
     var o = getOrder(link.dataset.driveLink);
-    if (o.driveLink !== link.value) {
-      o.driveLink = link.value.trim();
-      saveOrders();
-      syncToSheet({ action: 'link', orderNumber: o.orderNumber, link: o.driveLink });
-      toast('Packing slip link saved');
+    var val = link.value.trim();
+    if (o.driveLink !== val) {
+      ordersCol.doc(o.id).update({ driveLink: val }).then(function () {
+        syncToSheet({ action: 'link', orderNumber: o.orderNumber, link: val });
+        toast('Packing slip link saved');
+      }).catch(onFirestoreError);
     }
   }, true);
 
@@ -755,18 +781,26 @@
     openModal(
       '<h2>Settings</h2>' +
       '<label class="field"><span>Google Apps Script Web App URL</span>' +
-      '<input type="url" id="stAppsUrl" placeholder="https://script.google.com/macros/s/.../exec" value="' + escapeHtml(state.settings.appsScriptUrl) + '"></label>' +
-      '<p style="font-size:12px;color:#766a5f">Orders will sync automatically to your Google Sheet once this is set. See README for setup instructions.</p>' +
+      '<input type="url" id="stAppsUrl" placeholder="https://script.google.com/macros/s/.../exec" value="' + escapeHtml(state.settings.appsScriptUrl || '') + '"></label>' +
+      '<p style="font-size:12px;color:#766a5f">Orders will sync automatically to your Google Sheet once this is set. This is shared across all devices signed in. See README for setup instructions.</p>' +
       '<a href="https://docs.google.com/spreadsheets/d/' + SHEET_ID + '/edit" target="_blank" style="font-size:13px;color:#328788">Open Google Sheet →</a>' +
-      '<div class="modal-actions"><button class="btn btn-ghost" id="stCancel">Cancel</button><button class="btn btn-primary" id="stSave">Save</button></div>'
+      '<div class="modal-actions"><button class="btn btn-ghost" id="stCancel">Cancel</button><button class="btn btn-primary" id="stSave">Save</button></div>' +
+      '<div class="modal-actions"><button class="btn btn-danger btn-block" id="stSignOut">Sign Out of This Device</button></div>'
     );
     document.getElementById('stCancel').addEventListener('click', closeModal);
     document.getElementById('stSave').addEventListener('click', function () {
-      state.settings.appsScriptUrl = document.getElementById('stAppsUrl').value.trim();
-      saveSettings();
-      closeModal();
-      toast('Settings saved');
-      flushPendingSync();
+      var url = document.getElementById('stAppsUrl').value.trim();
+      metaCol.doc('settings').set({ appsScriptUrl: url }, { merge: true }).then(function () {
+        closeModal();
+        toast('Settings saved');
+        flushPendingSync();
+      }).catch(onFirestoreError);
+    });
+    document.getElementById('stSignOut').addEventListener('click', function () {
+      if (confirm('Sign out on this device? You’ll need the PIN to open the app again here.')) {
+        closeModal();
+        daAuth.signOut();
+      }
     });
   });
 
@@ -777,11 +811,91 @@
     });
   }
 
-  /* ---------- INIT ---------- */
-  renderProducts();
-  renderNewOrderCatFilter();
-  renderNewOrderProducts();
-  renderSummary();
-  renderOrders();
-  flushPendingSync();
+  /* ---------- AUTH GATE ---------- */
+  var pinForm = document.getElementById('pinForm');
+  var pinInput = document.getElementById('pinInput');
+  var pinError = document.getElementById('pinError');
+  var pinSubmitBtn = document.getElementById('pinSubmitBtn');
+
+  pinForm.addEventListener('submit', function (e) {
+    e.preventDefault();
+    pinError.textContent = '';
+    pinSubmitBtn.disabled = true;
+    pinSubmitBtn.textContent = 'Unlocking…';
+    daAuth.signInWithEmailAndPassword(DA_SHARED_AUTH_EMAIL, pinInput.value).catch(function () {
+      pinError.textContent = 'Incorrect PIN. Please try again.';
+    }).finally(function () {
+      pinSubmitBtn.disabled = false;
+      pinSubmitBtn.textContent = 'Unlock';
+    });
+  });
+
+  function ensureDoc(ref, defaults) {
+    return ref.get().then(function (snap) {
+      if (!snap.exists) return ref.set(defaults);
+    });
+  }
+
+  function startListeners() {
+    if (listenersStarted) return;
+    listenersStarted = true;
+
+    Promise.all([
+      ensureDoc(metaCol.doc('categories'), { list: DEFAULT_CATEGORIES.slice() }),
+      ensureDoc(metaCol.doc('counter'), { value: 0 }),
+      ensureDoc(metaCol.doc('settings'), { appsScriptUrl: '' })
+    ]).catch(onFirestoreError);
+
+    unsubscribers.push(productsCol.onSnapshot(function (snap) {
+      state.products = snap.docs.map(function (d) { return Object.assign({ id: d.id }, d.data()); });
+      state.products.sort(function (a, b) { return a.name.localeCompare(b.name); });
+      renderProducts();
+      renderNewOrderProducts();
+      refreshCategoryModalIfOpen();
+    }, onFirestoreError));
+
+    unsubscribers.push(metaCol.doc('categories').onSnapshot(function (doc) {
+      state.categories = (doc.exists && doc.data().list) ? doc.data().list : DEFAULT_CATEGORIES.slice();
+      renderNewOrderCatFilter();
+      renderProducts();
+      renderNewOrderProducts();
+      refreshCategoryModalIfOpen();
+    }, onFirestoreError));
+
+    unsubscribers.push(ordersCol.orderBy('createdAt', 'desc').onSnapshot(function (snap) {
+      state.orders = snap.docs.map(function (d) { return Object.assign({ id: d.id }, d.data()); });
+      renderOrders();
+    }, onFirestoreError));
+
+    unsubscribers.push(metaCol.doc('settings').onSnapshot(function (doc) {
+      state.settings = doc.exists ? doc.data() : { appsScriptUrl: '' };
+    }, onFirestoreError));
+
+    renderNewOrderCatFilter();
+    renderSummary();
+    flushPendingSync();
+  }
+
+  function stopListeners() {
+    unsubscribers.forEach(function (unsub) { unsub(); });
+    unsubscribers = [];
+    listenersStarted = false;
+    state.products = [];
+    state.categories = DEFAULT_CATEGORIES.slice();
+    state.orders = [];
+  }
+
+  daAuth.onAuthStateChanged(function (user) {
+    if (user) {
+      document.getElementById('authGate').classList.add('hidden');
+      document.getElementById('app').classList.remove('hidden');
+      pinInput.value = '';
+      pinError.textContent = '';
+      startListeners();
+    } else {
+      document.getElementById('app').classList.add('hidden');
+      document.getElementById('authGate').classList.remove('hidden');
+      stopListeners();
+    }
+  });
 })();

@@ -1,10 +1,11 @@
 /* Dil Afroze Order Manager — service worker (offline app shell caching) */
-var CACHE_NAME = 'dil-afroze-v1';
+var CACHE_NAME = 'dil-afroze-v2';
 var PRECACHE = [
   './',
   './index.html',
   './styles.css',
   './app.js',
+  './firebase-config.js',
   './manifest.webmanifest',
   './icons/icon-192.png',
   './icons/icon-512.png'
