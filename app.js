@@ -187,9 +187,14 @@
           (p.desc ? '<div class="product-desc">' + escapeHtml(p.desc) + '</div>' : '') +
           '<div class="product-price">' + money(p.price) + '</div>' +
           '</div>' +
-          '<div class="product-actions"><button class="icon-del" data-del-product="' + p.id + '" aria-label="Delete">' +
+          '<div class="product-actions">' +
+          '<button class="icon-edit" data-edit-product="' + p.id + '" aria-label="Edit">' +
+          '<svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="M14.06 4.94l3.75 3.75L7.5 19H3.75v-3.75L14.06 4.94Zm2.83-2.83a1.5 1.5 0 0 1 2.12 0l1.88 1.88a1.5 1.5 0 0 1 0 2.12l-1.42 1.42-3.75-3.75 1.17-1.17Z"/></svg>' +
+          '</button>' +
+          '<button class="icon-del" data-del-product="' + p.id + '" aria-label="Delete">' +
           '<svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="M6 7h12l-1 14H7L6 7Zm3-3h6l1 2H8l1-2ZM9 10v8m6-8v8" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg>' +
-          '</button></div>' +
+          '</button>' +
+          '</div>' +
           '</div>';
       });
       html += '</div>';
@@ -213,10 +218,16 @@
           toast('Product deleted');
         }).catch(onFirestoreError);
       }
+      return;
+    }
+    var editBtn = e.target.closest('[data-edit-product]');
+    if (editBtn) {
+      var prod = state.products.find(function (x) { return x.id === editBtn.dataset.editProduct; });
+      if (prod) openProductModal(prod);
     }
   });
 
-  document.getElementById('addProductBtn').addEventListener('click', openAddProductModal);
+  document.getElementById('addProductBtn').addEventListener('click', function () { openProductModal(null); });
 
   function categoryOptionsHtml(selected) {
     return allCategoriesInOrder().map(function (c) {
@@ -224,19 +235,20 @@
     }).join('');
   }
 
-  function openAddProductModal() {
+  function openProductModal(existing) {
+    var isEdit = !!existing;
     openModal(
-      '<h2>Add Product</h2>' +
-      '<label class="field"><span>Name *</span><input type="text" id="pName" placeholder="Product name"></label>' +
-      '<label class="field"><span>Price (£) *</span><input type="number" id="pPrice" min="0" step="0.01" placeholder="0.00"></label>' +
-      '<label class="field"><span>Description</span><textarea id="pDesc" rows="2" placeholder="Optional description"></textarea></label>' +
-      '<label class="field"><span>Category</span><select id="pCat">' + categoryOptionsHtml() + '</select></label>' +
+      '<h2>' + (isEdit ? 'Edit Product' : 'Add Product') + '</h2>' +
+      '<label class="field"><span>Name *</span><input type="text" id="pName" placeholder="Product name" value="' + (isEdit ? escapeHtml(existing.name) : '') + '"></label>' +
+      '<label class="field"><span>Price (£) *</span><input type="number" id="pPrice" min="0" step="0.01" placeholder="0.00" value="' + (isEdit ? existing.price : '') + '"></label>' +
+      '<label class="field"><span>Description</span><textarea id="pDesc" rows="2" placeholder="Optional description">' + (isEdit ? escapeHtml(existing.desc) : '') + '</textarea></label>' +
+      '<label class="field"><span>Category</span><select id="pCat">' + categoryOptionsHtml(isEdit ? existing.cat : undefined) + '</select></label>' +
       '<label class="field"><span>Photo</span><input type="file" id="pPhoto" accept="image/*"></label>' +
-      '<div class="photo-preview-row" id="pPhotoPreviewRow" style="display:none">' +
-      '<img class="photo-preview" id="pPhotoPreview"><button class="btn btn-ghost btn-sm" id="pPhotoRemove">Remove</button></div>' +
+      '<div class="photo-preview-row" id="pPhotoPreviewRow" style="display:' + (isEdit && existing.img ? 'flex' : 'none') + '">' +
+      '<img class="photo-preview" id="pPhotoPreview" src="' + (isEdit && existing.img ? existing.img : '') + '"><button class="btn btn-ghost btn-sm" id="pPhotoRemove">Remove</button></div>' +
       '<div class="modal-actions"><button class="btn btn-ghost" id="pCancel">Cancel</button><button class="btn btn-primary" id="pSave">Save</button></div>'
     );
-    var photoData = '';
+    var photoData = isEdit ? (existing.img || '') : '';
     document.getElementById('pPhoto').addEventListener('change', function (e) {
       var f = e.target.files[0];
       if (!f) return;
@@ -261,12 +273,13 @@
       if (isNaN(price) || price < 0) { toast('Please enter a valid price'); return; }
       var saveBtn = document.getElementById('pSave');
       saveBtn.disabled = true;
-      productsCol.add({
-        name: name, price: price, desc: desc, cat: cat, img: photoData,
-        createdAt: firebase.firestore.FieldValue.serverTimestamp()
-      }).then(function () {
+      var data = { name: name, price: price, desc: desc, cat: cat, img: photoData };
+      var op = isEdit
+        ? productsCol.doc(existing.id).update(data)
+        : productsCol.add(Object.assign({ createdAt: firebase.firestore.FieldValue.serverTimestamp() }, data));
+      op.then(function () {
         closeModal();
-        toast('Product added');
+        toast(isEdit ? 'Product updated' : 'Product added');
       }).catch(function (err) {
         onFirestoreError(err);
         saveBtn.disabled = false;

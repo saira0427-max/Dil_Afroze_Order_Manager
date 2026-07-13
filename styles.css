@@ -241,6 +241,10 @@ main { flex: 1; padding: 14px; padding-bottom: 40px; }
   background: none; border: none; color: var(--red-brown);
   cursor: pointer; padding: 6px;
 }
+.icon-edit {
+  background: none; border: none; color: var(--teal-dark);
+  cursor: pointer; padding: 6px;
+}
 
 /* ORDER PRODUCT CARD (New Order tab) */
 .order-product-card { display: flex; flex-direction: column; gap: 8px; background: var(--card-bg); border: 1px solid var(--border); border-radius: var(--radius); padding: 10px; margin-bottom: 10px; }
