@@ -13,12 +13,23 @@ var FIREBASE_PROJECT_ID = 'dil-afroze-orders';
 
 function doPost(e) {
   var d = JSON.parse(e.postData.contents);
-  if (d.action == 'generateSlip') {
-    generateSlip(d);
-  } else {
-    go(d);
+  try {
+    if (d.action == 'generateSlip') {
+      generateSlip(d);
+    } else {
+      go(d);
+    }
+  } catch (err) {
+    logDebug('doPost(' + (d.action || '?') + ' ' + (d.orderNumber || '') + ')', err.message + '\n' + err.stack);
   }
   return ContentService.createTextOutput('ok');
+}
+
+function logDebug(context, message) {
+  var b = SpreadsheetApp.getActiveSpreadsheet();
+  var s = b.getSheetByName('Debug') || b.insertSheet('Debug');
+  if (s.getLastRow() === 0) s.appendRow(['Time', 'Context', 'Message']);
+  s.appendRow([new Date(), context, message]);
 }
 
 function doGet(e) {
@@ -138,11 +149,14 @@ function writeLinkToSheet(orderNumber, link) {
 function writeLinkToFirestore(docId, link) {
   var url = 'https://firestore.googleapis.com/v1/projects/' + FIREBASE_PROJECT_ID +
     '/databases/(default)/documents/orders/' + docId + '?updateMask.fieldPaths=driveLink';
-  UrlFetchApp.fetch(url, {
+  var res = UrlFetchApp.fetch(url, {
     method: 'patch',
     contentType: 'application/json',
     headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() },
     payload: JSON.stringify({ fields: { driveLink: { stringValue: link } } }),
     muteHttpExceptions: true
   });
+  if (res.getResponseCode() >= 300) {
+    logDebug('writeLinkToFirestore(' + docId + ')', res.getResponseCode() + ': ' + res.getContentText());
+  }
 }
