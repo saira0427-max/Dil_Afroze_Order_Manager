@@ -10,12 +10,12 @@
  * rules + the PIN sign-in (Firebase Authentication), not by hiding these.
  */
 var firebaseConfig = {
-  apiKey: "REPLACE_WITH_YOUR_API_KEY",
-  authDomain: "REPLACE_WITH_YOUR_PROJECT.firebaseapp.com",
-  projectId: "REPLACE_WITH_YOUR_PROJECT_ID",
-  storageBucket: "REPLACE_WITH_YOUR_PROJECT.appspot.com",
-  messagingSenderId: "REPLACE_WITH_YOUR_SENDER_ID",
-  appId: "REPLACE_WITH_YOUR_APP_ID"
+  apiKey: "AIzaSyDE_E1nF6_J2dBEU9hk3lGIg1zS9CVsqRc",
+  authDomain: "dil-afroze-orders.firebaseapp.com",
+  projectId: "dil-afroze-orders",
+  storageBucket: "dil-afroze-orders.firebasestorage.app",
+  messagingSenderId: "731055011285",
+  appId: "1:731055011285:web:a7f752dab24a4715b4f95c"
 };
 
 // The single shared account used for the PIN gate. This does not need to be
