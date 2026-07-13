@@ -1,5 +1,5 @@
 /* Dil Afroze Order Manager — service worker (offline app shell caching) */
-var CACHE_NAME = 'dil-afroze-v2';
+var CACHE_NAME = 'dil-afroze-v3';
 var PRECACHE = [
   './',
   './index.html',
@@ -35,16 +35,21 @@ self.addEventListener('fetch', function (event) {
   var url = new URL(req.url);
   if (url.origin !== self.location.origin) return;
 
+  // Network-first: always prefer the live version when online (this app
+  // changes frequently), only falling back to the cache when offline.
+  // A cache-first strategy here meant updates were silently one load
+  // behind forever, since the stale cached copy was always served
+  // immediately while the network response only updated the cache for
+  // "next time."
   event.respondWith(
-    caches.match(req).then(function (cached) {
-      var network = fetch(req).then(function (res) {
-        if (res && res.status === 200) {
-          var copy = res.clone();
-          caches.open(CACHE_NAME).then(function (cache) { cache.put(req, copy); });
-        }
-        return res;
-      }).catch(function () { return cached; });
-      return cached || network;
+    fetch(req).then(function (res) {
+      if (res && res.status === 200) {
+        var copy = res.clone();
+        caches.open(CACHE_NAME).then(function (cache) { cache.put(req, copy); });
+      }
+      return res;
+    }).catch(function () {
+      return caches.match(req);
     })
   );
 });
