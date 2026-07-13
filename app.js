@@ -639,7 +639,10 @@
         Object.keys(STATUS_LABELS).map(function (k) { return '<option value="' + k + '"' + (o.status === k ? ' selected' : '') + '>' + STATUS_LABELS[k] + '</option>'; }).join('') +
         '</select></label>' +
         '</div>' +
-        '<div class="order-card-actions"><button class="btn btn-brown" data-print="' + o.id + '">Print Packing Slip</button></div>' +
+        '<div class="order-card-actions">' +
+        '<button class="btn btn-brown" data-print="' + o.id + '">Print Packing Slip</button>' +
+        '<button class="btn btn-danger" data-del-order="' + o.id + '">Delete</button>' +
+        '</div>' +
         '</div>';
     }).join('');
   }
@@ -665,6 +668,17 @@
     var printBtn = e.target.closest('[data-print]');
     if (printBtn) {
       printPackingSlip(getOrder(printBtn.dataset.print));
+      return;
+    }
+    var delOrderBtn = e.target.closest('[data-del-order]');
+    if (delOrderBtn) {
+      var order = getOrder(delOrderBtn.dataset.delOrder);
+      if (order && confirm('Delete order ' + order.orderNumber + '? This cannot be undone.')) {
+        ordersCol.doc(order.id).delete().then(function () {
+          syncToSheet({ action: 'delete', orderNumber: order.orderNumber });
+          toast('Order ' + order.orderNumber + ' deleted');
+        }).catch(onFirestoreError);
+      }
       return;
     }
   });

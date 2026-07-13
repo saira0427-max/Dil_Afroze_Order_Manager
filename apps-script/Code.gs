@@ -42,6 +42,7 @@ function go(d) {
   }
 
   if (r > 0) {
+    if (d.action == 'delete') { s.deleteRow(r); return; }
     if (d.status == 'packaged') { s.getRange(r, 5).setValue(d.date); }
     if (d.status == 'shipped') { s.getRange(r, 6).setValue(d.date); }
     if (d.status == 'delivered') { s.getRange(r, 7).setValue(d.date); }
