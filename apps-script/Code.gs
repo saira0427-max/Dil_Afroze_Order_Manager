@@ -137,12 +137,33 @@ function fillItemsTable(body, items) {
   }
   if (!itemsTable || !items.length) return;
 
+  // Insert one fresh row per item (cloned from the untouched template row),
+  // then remove the original template row at the end. Reusing the template
+  // row in place for the first item would mean every later clone copies
+  // that item's already-substituted text instead of the blank placeholders.
   var templateRow = itemsTable.getRow(templateRowIndex);
   items.forEach(function (item, idx) {
-    var row = idx === 0 ? templateRow : itemsTable.insertTableRow(templateRowIndex + idx, templateRow.copy());
+    var row = itemsTable.insertTableRow(templateRowIndex + idx, templateRow.copy());
     row.getCell(0).replaceText(tag('ITEM_LINE'), safeReplacement(item.line));
     row.getCell(1).replaceText(tag('ITEM_AMOUNT'), safeReplacement(item.amount));
+    if (item.img) {
+      try {
+        var img = insertImageFromDataUrl(row.getCell(0), item.img);
+        if (img) { img.setWidth(40); img.setHeight(40); }
+      } catch (imgErr) {
+        // skip a broken/oversized image rather than failing the whole slip
+      }
+    }
   });
+  itemsTable.removeRow(templateRowIndex + items.length);
+}
+
+function insertImageFromDataUrl(cell, dataUrl) {
+  var match = /^data:(image\/[a-zA-Z0-9.+-]+);base64,(.*)$/.exec(dataUrl);
+  if (!match) return null;
+  var bytes = Utilities.base64Decode(match[2]);
+  var blob = Utilities.newBlob(bytes, match[1], 'item.jpg');
+  return cell.insertImage(0, blob);
 }
 
 function writeLinkToSheet(orderNumber, link) {
