@@ -1,5 +1,5 @@
 /* Dil Afroze Order Manager — service worker (offline app shell caching) */
-var CACHE_NAME = 'dil-afroze-v3';
+var CACHE_NAME = 'dil-afroze-v4';
 var PRECACHE = [
   './',
   './index.html',
@@ -41,11 +41,14 @@ self.addEventListener('fetch', function (event) {
   // behind forever, since the stale cached copy was always served
   // immediately while the network response only updated the cache for
   // "next time."
+  // Bypass the browser's own HTTP cache too, not just this service worker's
+  // cache -- fetch(req) alone still honours normal HTTP caching semantics,
+  // which was letting a stale response slip through even after switching
+  // to a network-first strategy.
   event.respondWith(
-    fetch(req).then(function (res) {
+    fetch(req.url, { cache: 'no-store' }).then(function (res) {
       if (res && res.status === 200) {
-        var copy = res.clone();
-        caches.open(CACHE_NAME).then(function (cache) { cache.put(req, copy); });
+        caches.open(CACHE_NAME).then(function (cache) { cache.put(req, res.clone()); });
       }
       return res;
     }).catch(function () {
