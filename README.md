@@ -71,15 +71,72 @@ This URL is stored in Firestore too, so you only need to set it once — every d
 
 **Note:** the sheet only receives updates for orders that were *created* after the webhook was connected (the sync matches rows by order number). Orders created before you set the URL won't backfill automatically.
 
-## 4. Using the app
+## 4. Automatic packing-slip PDFs to Google Drive
 
-- **Products tab** — add your catalogue (name, price, description, category, optional photo). Manage categories from the "Categories" button; the 8 defaults can't be deleted, custom ones can (as long as no product uses them).
+Tapping **Save to Drive** on an order fills in a Google Doc template with that order's details, exports it as a PDF, saves it into a Drive folder you choose, and writes the link straight back into the app and Sheet — no copying or pasting. This is a separate, additional feature from **Print Packing Slip**, which is unchanged and still opens the full branded slip in a new browser tab for printing.
+
+The automated Drive copy is a simpler, text-based layout (no product photos, no fancy rounded corners) — this trade-off is what makes it possible to generate reliably with no extra sign-in step. Use Print Packing Slip whenever you want the fully-styled version.
+
+### Create the packing-slip template
+
+1. In Google Drive, create a new **Google Doc**. Name it something like "Packing Slip Template."
+2. Lay it out with these exact placeholder tokens (curly braces included) — style the text, colours, and spacing however you like, this is exactly what will appear on every generated slip:
+
+   ```
+   DIL AFROZE
+   Natural Skin & Hair Care
+
+   Order: {{ORDER_NUMBER}}          Date: {{DATE}}
+
+   Ship To:
+   {{CUSTOMER_NAME}}
+   {{CUSTOMER_ADDRESS}}
+   {{CUSTOMER_PHONE}}
+   {{CUSTOMER_EMAIL}}
+   ```
+
+3. Insert a table (**Insert → Table → 2×2**). Put "Product" and "Amount" in the header row. In the single row below it, put `{{ITEM_LINE}}` in the left cell and `{{ITEM_AMOUNT}}` in the right cell — this one row is a template that gets duplicated once per item automatically, so leave it as exactly one row.
+4. Below the table, add:
+
+   ```
+   {{DISCOUNT_LINE}}
+
+   Total: {{TOTAL}}
+
+   {{NOTES}}
+
+   Thank you for your order ♥
+   www.dilafroze.co.uk
+   WhatsApp: 07577 756 348
+   ```
+
+5. From the Doc's URL (`https://docs.google.com/document/d/`**`THIS_PART`**`/edit`), copy the ID — you'll paste it into `Code.gs` below.
+6. Create (or choose) a Drive **folder** where the generated PDFs should be saved, and copy its ID from its URL the same way (`https://drive.google.com/drive/folders/`**`THIS_PART`**).
+
+### Wire it into the Apps Script
+
+1. Open the same Apps Script project as before (Sheet → **Extensions → Apps Script**).
+2. Replace `Code.gs` with the latest version from [`apps-script/Code.gs`](apps-script/Code.gs) in this repo, and fill in your two IDs near the top:
+   ```js
+   var DRIVE_FOLDER_ID = 'your folder ID here';
+   var TEMPLATE_DOC_ID = 'your template Doc ID here';
+   ```
+3. This feature needs a couple of extra permissions, so the project needs to switch from automatic to an explicit permissions list. In the Apps Script editor, click **Project Settings** (gear icon) → check **"Show `appsscript.json` manifest file in editor"**. Then open the `appsscript.json` file that appears in the file list and replace its contents with [`apps-script/appsscript.json`](apps-script/appsscript.json) from this repo.
+4. **Deploy → Manage deployments** → pencil/edit icon → **Version: New version** → **Deploy**. You'll be asked to re-authorize — this time the consent screen will list Sheets, Drive, and an external service (Firestore) — click through it (same "unverified app" warning as before, since it's your own script).
+
+That's it — the webhook URL stays the same, nothing changes in the app's Settings. Tap **Save to Drive** on any order to try it.
+
+**If a PDF doesn't appear after a minute:** the most common cause is the folder/template IDs not being filled in yet, or the manifest step being skipped. In the Apps Script editor, click **Executions** (left sidebar) to see the error from the most recent attempt.
+
+## 5. Using the app
+
+- **Products tab** — add your catalogue (name, price, description, category, optional photo). Manage categories from the "Categories" button; the 8 defaults can't be deleted, custom ones can (as long as no product uses them). Each product has an edit (pencil) and delete icon.
 - **New Order tab** — fill in customer details, filter products by category, tap **Add** to add items. Use the GIFT toggle to mark free items, the pencil icon to adjust a name/price for just this order, or "Add Custom / One-off Item" for anything not in the catalogue. Save Order once items are added.
-- **Orders tab** — filter by status, update delivery/payment method, mark paid, paste a Drive link to the saved packing-slip PDF, update status, download a CSV of all orders, or print a packing slip (opens in a new tab — use the Print/Save as PDF button there).
+- **Orders tab** — filter by status, update delivery/payment method, mark paid, paste a Drive link manually (or let **Save to Drive** fill it in automatically — see step 4), update status, download a CSV of all orders, print a packing slip, or delete an order entirely (with confirmation — this also removes its row from the Sheet).
 
 Data lives in Firestore and syncs in real time across every device signed in with the shop PIN. The app also works offline: browsing the catalogue and updating existing orders (status, payment, paid, notes, packing-slip link) all queue locally and sync once you're reconnected. Creating a **new** order needs an active connection at the moment you tap Save Order, since it coordinates the shared order-numbering across devices.
 
-## 5. Branding — swapping in the real logo
+## 6. Branding — swapping in the real logo
 
 No logo image file was available when this app was built, so the header and packing slip currently show a styled **"DIL AFROZE"** text wordmark as a placeholder. To use the actual brown PNG logo:
 
@@ -100,6 +157,7 @@ manifest.webmanifest      PWA manifest (installable to home screen)
 sw.js                     Service worker (offline caching of the app shell)
 icons/                    App icons + optional logo.png
 apps-script/Code.gs        Google Apps Script webhook source (deploy this into your Sheet)
+apps-script/appsscript.json  Manifest with OAuth scopes needed for Drive PDF generation (see step 4)
 ```
 
 ## Local development

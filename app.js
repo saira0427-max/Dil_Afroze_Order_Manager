@@ -641,7 +641,10 @@
         '</div>' +
         '<div class="order-card-actions">' +
         '<button class="btn btn-brown" data-print="' + o.id + '">Print Packing Slip</button>' +
-        '<button class="btn btn-danger" data-del-order="' + o.id + '">Delete</button>' +
+        '<button class="btn btn-ghost" data-save-drive="' + o.id + '">Save to Drive</button>' +
+        '</div>' +
+        '<div class="order-card-actions">' +
+        '<button class="btn btn-danger btn-block" data-del-order="' + o.id + '">Delete Order</button>' +
         '</div>' +
         '</div>';
     }).join('');
@@ -681,7 +684,40 @@
       }
       return;
     }
+    var saveDriveBtn = e.target.closest('[data-save-drive]');
+    if (saveDriveBtn) {
+      requestPackingSlipUpload(getOrder(saveDriveBtn.dataset.saveDrive));
+      return;
+    }
   });
+
+  function requestPackingSlipUpload(o) {
+    var url = state.settings.appsScriptUrl;
+    if (!url) { toast('Set the Apps Script URL in Settings first'); return; }
+    var payload = {
+      action: 'generateSlip',
+      docId: o.id,
+      orderNumber: o.orderNumber,
+      date: o.date,
+      customerName: o.customer.name,
+      customerAddress: o.customer.address || '',
+      customerPhone: o.customer.phone || '',
+      customerEmail: o.customer.email || '',
+      notes: o.customer.notes || '',
+      items: o.items.map(function (it) {
+        return {
+          line: it.name + ' × ' + it.qty + (it.gift ? ' (GIFT)' : ''),
+          amount: it.gift ? 'FREE' : money(it.price * it.qty)
+        };
+      }),
+      discountLine: o.discount > 0 ? ('Discount: − ' + money(o.discount)) : '',
+      total: money(o.total)
+    };
+    toast('Generating packing slip… this can take a few seconds');
+    sendPayload(url, payload).catch(function () {
+      toast('Could not reach Apps Script — check your connection');
+    });
+  }
 
   document.getElementById('ordersList').addEventListener('change', function (e) {
     var del = e.target.closest('[data-delivery]');
