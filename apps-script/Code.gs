@@ -160,13 +160,17 @@ function fillItemsTable(body, items) {
     row.getCell(1).replaceText(tag('ITEM_AMOUNT'), safeReplacement(item.amount));
     if (item.img) {
       try {
+        logDebug('image-attempt', item.line + ' — received ' + item.img.length + ' chars, starts "' + item.img.slice(0, 24) + '"');
         var img = insertImageFromDataUrl(row.getCell(0), item.img);
+        logDebug('image-result', item.line + ' — inserted=' + (!!img));
         if (img) { img.setWidth(40); img.setHeight(40); }
       } catch (imgErr) {
         // don't let a broken/oversized image fail the whole slip, but log
         // it so a genuine embedding problem doesn't fail silently
-        logDebug('insertImageFromDataUrl(' + item.line + ')', imgErr.message);
+        logDebug('insertImageFromDataUrl(' + item.line + ')', imgErr.message + '\n' + imgErr.stack);
       }
+    } else {
+      logDebug('image-skip', item.line + ' — no image data in payload for this item');
     }
   });
   itemsTable.removeRow(templateRowIndex + items.length);
