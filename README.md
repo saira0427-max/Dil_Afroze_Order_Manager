@@ -67,7 +67,7 @@ The app posts order updates to a Google Apps Script webhook, which writes into y
 2. Paste the Web App URL into **Google Apps Script Web App URL**.
 3. Tap **Save**.
 
-This URL is stored in Firestore too, so you only need to set it once — every device picks it up automatically. From now on, creating an order, updating its status, marking it paid/unpaid, or saving a packing-slip link will sync automatically to the "Orders" tab of your sheet. The app tries both a GET beacon and a POST request for maximum compatibility, and queues updates locally to retry if you're offline when they happen.
+This URL is stored in Firestore too, so you only need to set it once — every device picks it up automatically. From now on, creating an order, updating its status, marking it paid/unpaid, or saving a packing-slip link will sync automatically to the "Orders" tab of your sheet, and queues updates locally to retry if you're offline when they happen.
 
 **Note:** the sheet only receives updates for orders that were *created* after the webhook was connected (the sync matches rows by order number). Orders created before you set the URL won't backfill automatically.
 

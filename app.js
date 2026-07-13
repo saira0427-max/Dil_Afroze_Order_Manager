@@ -101,16 +101,15 @@
   }
 
   function sendPayload(url, payload) {
-    var json = JSON.stringify(payload);
-    try {
-      var img = new Image();
-      img.src = url + (url.indexOf('?') >= 0 ? '&' : '?') + 'payload=' + encodeURIComponent(json);
-    } catch (e) { /* ignore */ }
+    // Only POST — sending a GET beacon as well used to duplicate every sync
+    // event, and Apps Script has no reliable way to de-duplicate two
+    // near-simultaneous requests for the same order before either has
+    // finished writing its row.
     return fetch(url, {
       method: 'POST',
       mode: 'no-cors',
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: json
+      body: JSON.stringify(payload)
     });
   }
 

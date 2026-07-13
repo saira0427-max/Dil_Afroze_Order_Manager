@@ -38,6 +38,18 @@ function doGet(e) {
 }
 
 function go(d) {
+  var lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  try {
+    goLocked(d);
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+// Guards against two near-simultaneous requests (e.g. two devices syncing
+// at once) both deciding a row doesn't exist yet and both appending one.
+function goLocked(d) {
   var b = SpreadsheetApp.getActiveSpreadsheet();
   var s = b.getSheetByName('Orders') || b.insertSheet('Orders');
 
@@ -151,7 +163,9 @@ function fillItemsTable(body, items) {
         var img = insertImageFromDataUrl(row.getCell(0), item.img);
         if (img) { img.setWidth(40); img.setHeight(40); }
       } catch (imgErr) {
-        // skip a broken/oversized image rather than failing the whole slip
+        // don't let a broken/oversized image fail the whole slip, but log
+        // it so a genuine embedding problem doesn't fail silently
+        logDebug('insertImageFromDataUrl(' + item.line + ')', imgErr.message);
       }
     }
   });
