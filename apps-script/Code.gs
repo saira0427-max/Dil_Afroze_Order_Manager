@@ -80,21 +80,32 @@ function go(d) {
  * into DRIVE_FOLDER_ID, and writes the resulting link back into both the
  * Sheet and the order's Firestore document (driveLink field).
  */
+// replaceText() treats its search pattern as a regex, so the literal
+// {{ }} braces must be escaped, and any $ or \ in the replacement text
+// (which could appear in a customer's name/address/notes) must be
+// escaped too, since replacement strings support $-backreferences.
+function tag(name) {
+  return '\\{\\{' + name + '\\}\\}';
+}
+function safeReplacement(s) {
+  return String(s == null ? '' : s).replace(/\\/g, '\\\\').replace(/\$/g, '\\$');
+}
+
 function generateSlip(d) {
   var folder = DriveApp.getFolderById(DRIVE_FOLDER_ID);
   var copyFile = DriveApp.getFileById(TEMPLATE_DOC_ID).makeCopy('Packing Slip ' + d.orderNumber, folder);
   var doc = DocumentApp.openById(copyFile.getId());
   var body = doc.getBody();
 
-  body.replaceText('{{ORDER_NUMBER}}', d.orderNumber || '');
-  body.replaceText('{{DATE}}', d.date || '');
-  body.replaceText('{{CUSTOMER_NAME}}', d.customerName || '');
-  body.replaceText('{{CUSTOMER_ADDRESS}}', (d.customerAddress || '').replace(/\n/g, ', '));
-  body.replaceText('{{CUSTOMER_PHONE}}', d.customerPhone || '');
-  body.replaceText('{{CUSTOMER_EMAIL}}', d.customerEmail || '');
-  body.replaceText('{{DISCOUNT_LINE}}', d.discountLine || '');
-  body.replaceText('{{TOTAL}}', d.total || '');
-  body.replaceText('{{NOTES}}', d.notes ? ('Notes: ' + d.notes) : '');
+  body.replaceText(tag('ORDER_NUMBER'), safeReplacement(d.orderNumber));
+  body.replaceText(tag('DATE'), safeReplacement(d.date));
+  body.replaceText(tag('CUSTOMER_NAME'), safeReplacement(d.customerName));
+  body.replaceText(tag('CUSTOMER_ADDRESS'), safeReplacement((d.customerAddress || '').replace(/\n/g, ', ')));
+  body.replaceText(tag('CUSTOMER_PHONE'), safeReplacement(d.customerPhone));
+  body.replaceText(tag('CUSTOMER_EMAIL'), safeReplacement(d.customerEmail));
+  body.replaceText(tag('DISCOUNT_LINE'), safeReplacement(d.discountLine));
+  body.replaceText(tag('TOTAL'), safeReplacement(d.total));
+  body.replaceText(tag('NOTES'), safeReplacement(d.notes ? ('Notes: ' + d.notes) : ''));
 
   fillItemsTable(body, d.items || []);
 
@@ -129,8 +140,8 @@ function fillItemsTable(body, items) {
   var templateRow = itemsTable.getRow(templateRowIndex);
   items.forEach(function (item, idx) {
     var row = idx === 0 ? templateRow : itemsTable.insertTableRow(templateRowIndex + idx, templateRow.copy());
-    row.getCell(0).replaceText('{{ITEM_LINE}}', item.line);
-    row.getCell(1).replaceText('{{ITEM_AMOUNT}}', item.amount);
+    row.getCell(0).replaceText(tag('ITEM_LINE'), safeReplacement(item.line));
+    row.getCell(1).replaceText(tag('ITEM_AMOUNT'), safeReplacement(item.amount));
   });
 }
 
