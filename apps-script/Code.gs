@@ -170,7 +170,7 @@ function fillItemsTable(body, items) {
         logDebug('insertImageFromDataUrl(' + item.line + ')', imgErr.message + '\n' + imgErr.stack);
       }
     } else {
-      logDebug('image-skip', item.line + ' — no image data in payload for this item');
+      logDebug('image-skip', item.line + ' — no image data in payload for this item (pid=' + item.debugPid + ', productFound=' + item.debugProductFound + ')');
     }
   });
   itemsTable.removeRow(templateRowIndex + items.length);
