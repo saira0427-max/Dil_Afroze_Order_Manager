@@ -708,9 +708,7 @@
         return {
           line: it.name + ' × ' + it.qty + (it.gift ? ' (GIFT)' : ''),
           amount: it.gift ? 'FREE' : money(it.price * it.qty),
-          img: (prod && prod.img) || '',
-          debugPid: it.pid || '(none — custom item)',
-          debugProductFound: !!prod
+          img: (prod && prod.img) || ''
         };
       }),
       discountLine: o.discount > 0 ? ('Discount: − ' + money(o.discount)) : '',

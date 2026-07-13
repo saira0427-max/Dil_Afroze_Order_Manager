@@ -95,7 +95,7 @@ The automated Drive copy is a simpler, text-based layout (no product photos, no 
    {{CUSTOMER_EMAIL}}
    ```
 
-3. Insert a table (**Insert → Table → 2×2**). Put "Product" and "Amount" in the header row. In the single row below it, put `{{ITEM_LINE}}` in the left cell and `{{ITEM_AMOUNT}}` in the right cell — this one row is a template that gets duplicated once per item automatically, so leave it as exactly one row.
+3. Insert a table (**Insert → Table → 3×2**). Leave the first header cell blank, then put "Product" and "Amount" in the other two header cells. In the single row below it, leave the first (photo) cell blank, put `{{ITEM_LINE}}` in the middle cell and `{{ITEM_AMOUNT}}` in the right cell. Narrow the first column by dragging its border — that's where each item's photo gets inserted automatically. This one row is a template that gets duplicated once per item, so leave it as exactly one row.
 4. Below the table, add:
 
    ```
