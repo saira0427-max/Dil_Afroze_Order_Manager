@@ -7,8 +7,8 @@
 // Fill these in once you've created your Drive folder and packing-slip
 // template Doc — see README.md "Automatic packing-slip PDFs" for how to
 // build the template and get these two IDs from their Drive URLs.
-var DRIVE_FOLDER_ID = 'PUT_YOUR_DRIVE_FOLDER_ID_HERE';
-var TEMPLATE_DOC_ID = 'PUT_YOUR_TEMPLATE_DOC_ID_HERE';
+var DRIVE_FOLDER_ID = '1yMk5AykdcRGjnUU-8sg44IReUiHuni-e';
+var TEMPLATE_DOC_ID = '1yub3aD2gChV9M38lgb_Oz9tqc10hTDkiU4XYAKSP-TM';
 var FIREBASE_PROJECT_ID = 'dil-afroze-orders';
 
 function doPost(e) {
