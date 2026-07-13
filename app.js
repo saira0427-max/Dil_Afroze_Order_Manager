@@ -3,6 +3,10 @@
   'use strict';
 
   /* ---------- CONSTANTS ---------- */
+  // Bump this with every deploy -- shown in Settings so it's possible to
+  // confirm at a glance whether a device is running the latest code,
+  // instead of inferring it indirectly through Debug tab behaviour.
+  var APP_VERSION = '2026-07-13-02';
   var DEFAULT_CATEGORIES = ['Shampoo', 'Face & Body Soap', 'Face Wash', 'Body Lotion', 'Face Cream', 'Skin Care Set', 'Hair Bundles', 'Other'];
   var SHEET_ID = '1ccKmVjeOVZ5WVc8hn6oOfTGYMsqkJ6dfW1hof8gzr70';
   var STATUS_LABELS = { new: 'New', packaged: 'Packaged', shipped: 'Shipped', delivered: 'Delivered' };
@@ -849,7 +853,8 @@
       '<p style="font-size:12px;color:#766a5f">Orders will sync automatically to your Google Sheet once this is set. This is shared across all devices signed in. See README for setup instructions.</p>' +
       '<a href="https://docs.google.com/spreadsheets/d/' + SHEET_ID + '/edit" target="_blank" style="font-size:13px;color:#328788">Open Google Sheet →</a>' +
       '<div class="modal-actions"><button class="btn btn-ghost" id="stCancel">Cancel</button><button class="btn btn-primary" id="stSave">Save</button></div>' +
-      '<div class="modal-actions"><button class="btn btn-danger btn-block" id="stSignOut">Sign Out of This Device</button></div>'
+      '<div class="modal-actions"><button class="btn btn-danger btn-block" id="stSignOut">Sign Out of This Device</button></div>' +
+      '<p style="font-size:11px;color:#aaa;text-align:center;margin-top:14px">Version ' + APP_VERSION + '</p>'
     );
     document.getElementById('stCancel').addEventListener('click', closeModal);
     document.getElementById('stSave').addEventListener('click', function () {
